@@ -6,12 +6,12 @@ VibeGuard is an automated AI-powered code security scanner that analyzes your co
 
 ## Features
 
-- 🤖 **AI-Powered Analysis** - Uses Ollama with qwen3.5 model for intelligent security scanning
+- 🤖 **AI-Powered Analysis** - Uses OpenAI GPT-4o-mini for intelligent security scanning
 - 🔍 **Comprehensive Detection** - Finds hardcoded secrets, SQL injection, XSS, command injection, and more
 - 📊 **Trust Score** - Get a 0-100 security score for every file
 - 🎨 **Beautiful UI** - Dark-themed React interface with real-time scanning
 - 🔄 **GitHub Actions Integration** - Automatic PR scanning and commenting
-- ⚡ **Fast & Local** - Runs entirely on your machine, no data leaves your system
+- ⚡ **Fast & Local** - Powered by OpenAI API for fast and accurate analysis
 
 ## Security Checks
 
@@ -30,7 +30,17 @@ VibeGuard scans for:
 
 - Python 3.12+
 - Node.js 24+
-- [Ollama](https://ollama.com) installed locally
+- OpenAI API key (get one at platform.openai.com)
+
+### Environment Variables
+
+Create a `.env` file in the backend folder:
+
+```env
+OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_MODEL=gpt-4o-mini
+PORT=8000
+```
 
 ### Backend Setup
 
@@ -39,12 +49,8 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-Make sure Ollama is running with the qwen3.5 model:
-```bash
-ollama serve
-ollama pull qwen3.5:latest
+cp .env.example .env
+# Add your OpenAI API key to .env file
 ```
 
 ### Frontend Setup
@@ -99,7 +105,7 @@ VibeGuard automatically scans all code changes in pull requests.
 ### Setup in Your Repo
 
 1. Copy `.github/workflows/vibeguard.yml` to your repository
-2. Ensure Ollama is available in your CI environment (or modify to use a hosted API)
+2. Add `OPENAI_API_KEY` as a GitHub Actions secret in your repository settings
 3. Push to GitHub and open a PR to see it in action
 
 ## Demo Files
@@ -113,7 +119,7 @@ Try scanning both to see the difference!
 
 - **Backend**: FastAPI, Python 3.12
 - **Frontend**: React, Vite
-- **AI**: Ollama (qwen3.5:latest)
+- **AI**: OpenAI GPT-4o-mini
 - **CI/CD**: GitHub Actions
 
 ## Project Structure
