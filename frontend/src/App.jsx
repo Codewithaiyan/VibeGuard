@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import './App.css'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 function App() {
   const [code, setCode] = useState('')
   const [language, setLanguage] = useState('python')
@@ -20,7 +22,7 @@ function App() {
     setResult(null)
 
     try {
-      const response = await fetch('http://localhost:8000/scan', {
+      const response = await fetch(`${API_URL}/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, language, filename }),
