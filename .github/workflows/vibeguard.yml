@@ -21,60 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       COMMENT_MARKER: "<!-- vibeguard-security-scan -->"
+      BACKEND_URL: https://vibeguard-backend.onrender.com
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install backend dependencies
-        run: |
-          set -euo pipefail
-          cd backend
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Create backend/.env file
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "OPENAI_API_KEY secret is required for the VibeGuard security scan." >&2
-            exit 1
-          fi
-
-          cat > backend/.env <<EOF_ENV
-          OPENAI_API_KEY=${OPENAI_API_KEY}
-          OPENAI_MODEL=gpt-4o-mini
-          PORT=8000
-          EOF_ENV
-
-      - name: Start backend in background
-        run: |
-          set -euo pipefail
-          cd backend
-          nohup uvicorn main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
-          echo $! > ../backend.pid
-
-      - name: Wait for backend to be ready
-        run: |
-          set -euo pipefail
-          sleep 8
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-connrefused http://localhost:8000/health || {
-            echo "VibeGuard backend failed health checks." >&2
-            if [ -f backend.log ]; then
-              cat backend.log >&2
-            fi
-            exit 1
-          }
 
       - name: Scan changed files
         id: scan
@@ -186,7 +139,7 @@ jobs:
               --request POST \
               --header 'Content-Type: application/json' \
               --data "$payload" \
-              http://localhost:8000/scan 2>"$curl_error_file")"
+              "$BACKEND_URL/scan" 2>"$curl_error_file")"
             curl_status=$?
             set -e
 
@@ -306,10 +259,3 @@ jobs:
             exit 1
           fi
 
-      - name: Stop backend
-        if: always()
-        run: |
-          set -euo pipefail
-          if [ -f backend.pid ]; then
-            kill "$(cat backend.pid)" || true
-          fi
