@@ -1,32 +1,27 @@
-* {
-  margin: 0;
-  padding: 0;
+.app,
+.app * {
   box-sizing: border-box;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+.app {
+  min-height: 100svh;
+  padding: 2rem;
   background: #0a0a0a;
   color: #fff;
 }
 
-.app {
-  min-height: 100vh;
-  padding: 2rem;
-}
-
-header {
+.app-header {
   text-align: center;
   margin-bottom: 3rem;
 }
 
-header h1 {
+.app-header h1 {
+  margin: 0 0 0.5rem;
   font-size: 3rem;
-  margin-bottom: 0.5rem;
   color: #00ff88;
 }
 
-header p {
+.app-header p {
   font-size: 1.2rem;
   color: #888;
 }
@@ -39,7 +34,8 @@ header p {
   margin: 0 auto;
 }
 
-.left-panel, .right-panel {
+.left-panel,
+.right-panel {
   background: #1a1a1a;
   border-radius: 12px;
   padding: 2rem;
@@ -52,9 +48,8 @@ header p {
   margin-bottom: 1rem;
 }
 
-.filename-input {
-  flex: 1;
-  padding: 0.75rem;
+.filename-input,
+.app select {
   background: #0a0a0a;
   border: 1px solid #333;
   border-radius: 6px;
@@ -62,13 +57,13 @@ header p {
   font-size: 1rem;
 }
 
-select {
+.filename-input {
+  flex: 1;
+  padding: 0.75rem;
+}
+
+.app select {
   padding: 0.75rem 1rem;
-  background: #0a0a0a;
-  border: 1px solid #333;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 1rem;
   cursor: pointer;
 }
 
@@ -76,27 +71,27 @@ select {
   width: 100%;
   height: 400px;
   padding: 1rem;
+  margin-bottom: 1rem;
+  resize: vertical;
   background: #0a0a0a;
   border: 1px solid #333;
   border-radius: 6px;
   color: #fff;
-  font-family: 'Courier New', monospace;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   font-size: 0.95rem;
-  resize: vertical;
-  margin-bottom: 1rem;
 }
 
 .scan-button {
   width: 100%;
   padding: 1rem;
-  background: #00ff88;
-  color: #0a0a0a;
   border: none;
   border-radius: 6px;
+  background: #00ff88;
+  color: #0a0a0a;
   font-size: 1.1rem;
-  font-weight: bold;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s ease, background 0.2s ease;
 }
 
 .scan-button:hover:not(:disabled) {
@@ -118,36 +113,38 @@ select {
 }
 
 .loading {
-  text-align: center;
   padding: 3rem;
+  text-align: center;
 }
 
 .spinner {
   width: 50px;
   height: 50px;
+  margin: 0 auto 1rem;
   border: 4px solid #333;
   border-top-color: #00ff88;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .trust-score {
-  text-align: center;
+  margin-bottom: 1.5rem;
   padding: 2rem;
   border: 4px solid;
   border-radius: 12px;
-  margin-bottom: 1.5rem;
+  text-align: center;
 }
 
 .score-circle {
-  font-size: 4rem;
-  font-weight: bold;
   margin-bottom: 0.5rem;
+  font-size: 4rem;
+  font-weight: 700;
 }
 
 .score-label {
@@ -157,37 +154,38 @@ select {
 
 .risk-badge {
   display: inline-block;
+  margin-bottom: 1.5rem;
   padding: 0.5rem 1.5rem;
   border-radius: 20px;
-  font-weight: bold;
-  margin-bottom: 1.5rem;
+  font-weight: 700;
 }
 
 .summary {
   margin-bottom: 2rem;
 }
 
-.summary h3 {
+.summary h3,
+.vulnerabilities h3 {
   margin-bottom: 0.75rem;
   color: #00ff88;
 }
 
-.summary p {
-  line-height: 1.6;
+.summary p,
+.vuln-description {
   color: #ccc;
+  line-height: 1.6;
 }
 
 .vulnerabilities h3 {
   margin-bottom: 1rem;
-  color: #00ff88;
 }
 
 .vulnerability {
+  margin-bottom: 1rem;
+  padding: 1rem;
   background: #0a0a0a;
   border: 1px solid #333;
   border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
 }
 
 .vuln-header {
@@ -201,12 +199,12 @@ select {
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
   font-size: 0.75rem;
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .vuln-title {
   flex: 1;
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .line-number {
@@ -215,7 +213,6 @@ select {
 }
 
 .vuln-description {
-  color: #ccc;
   margin-bottom: 0.75rem;
   line-height: 1.5;
 }
@@ -233,20 +230,24 @@ select {
 }
 
 .no-vulnerabilities {
-  text-align: center;
   padding: 2rem;
+  text-align: center;
   font-size: 1.2rem;
   color: #00ff88;
 }
 
 .placeholder {
-  text-align: center;
   padding: 3rem;
+  text-align: center;
   color: #888;
   font-size: 1.1rem;
 }
 
 @media (max-width: 1024px) {
+  .app {
+    padding: 1rem;
+  }
+
   .container {
     grid-template-columns: 1fr;
   }

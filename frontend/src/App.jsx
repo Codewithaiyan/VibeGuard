@@ -23,7 +23,7 @@ function App() {
       const response = await fetch('http://localhost:8000/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language, filename })
+        body: JSON.stringify({ code, language, filename }),
       })
 
       if (!response.ok) throw new Error('Scan failed')
@@ -49,14 +49,14 @@ function App() {
       CRITICAL: '#ff4444',
       HIGH: '#ff8c00',
       MEDIUM: '#ffd700',
-      LOW: '#00ff88'
+      LOW: '#00ff88',
     }
     return colors[severity] || '#888'
   }
 
   return (
     <div className="app">
-      <header>
+      <header className="app-header">
         <h1>🛡️ VibeGuard</h1>
         <p>Ship safe. Every time.</p>
       </header>
@@ -126,7 +126,10 @@ function App() {
                   {result.vulnerabilities.map((vuln, idx) => (
                     <div key={idx} className="vulnerability">
                       <div className="vuln-header">
-                        <span className="severity-badge" style={{ backgroundColor: getSeverityColor(vuln.severity) }}>
+                        <span
+                          className="severity-badge"
+                          style={{ backgroundColor: getSeverityColor(vuln.severity) }}
+                        >
                           {vuln.severity}
                         </span>
                         <span className="vuln-title">{vuln.title}</span>
@@ -142,9 +145,7 @@ function App() {
               )}
 
               {result.vulnerabilities && result.vulnerabilities.length === 0 && (
-                <div className="no-vulnerabilities">
-                  ✅ No vulnerabilities detected!
-                </div>
+                <div className="no-vulnerabilities">✅ No vulnerabilities detected!</div>
               )}
             </>
           )}
