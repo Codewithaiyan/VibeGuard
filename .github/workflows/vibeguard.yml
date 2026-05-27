@@ -2,119 +2,314 @@ name: VibeGuard Security Scan
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: vibeguard-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  scan:
+  security-scan:
     runs-on: ubuntu-latest
-    
+    env:
+      COMMENT_MARKER: "<!-- vibeguard-security-scan -->"
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      
-      - name: Install Ollama
-        run: |
-          curl -fsSL https://ollama.com/install.sh | sh
-          ollama serve &
-          sleep 5
-          ollama pull qwen3.5:latest
-      
+          python-version: "3.12"
+
       - name: Install backend dependencies
         run: |
+          set -euo pipefail
           cd backend
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
-      - name: Start VibeGuard backend
+
+      - name: Create backend/.env file
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
+          set -euo pipefail
+
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            echo "OPENAI_API_KEY secret is required for the VibeGuard security scan." >&2
+            exit 1
+          fi
+
+          cat > backend/.env <<EOF_ENV
+          OPENAI_API_KEY=${OPENAI_API_KEY}
+          OPENAI_MODEL=gpt-4o-mini
+          PORT=8000
+          EOF_ENV
+
+      - name: Start backend in background
+        run: |
+          set -euo pipefail
           cd backend
-          python main.py &
-          sleep 5
-      
-      - name: Get changed files
-        id: changed-files
+          nohup uvicorn main:app --host 0.0.0.0 --port 8000 > ../backend.log 2>&1 &
+          echo $! > ../backend.pid
+
+      - name: Wait for backend to be ready
         run: |
-          git diff --name-only origin/${{ github.base_ref }}...${{ github.sha }} | grep -E '\.(py|js|ts|jsx|tsx)$' > changed_files.txt || true
-          echo "Changed files:"
-          cat changed_files.txt
-      
-      - name: Scan files
+          set -euo pipefail
+          sleep 8
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-connrefused http://localhost:8000/health || {
+            echo "VibeGuard backend failed health checks." >&2
+            if [ -f backend.log ]; then
+              cat backend.log >&2
+            fi
+            exit 1
+          }
+
+      - name: Scan changed files
         id: scan
         run: |
-          echo "# VibeGuard Security Scan Results" > scan_results.md
-          echo "" >> scan_results.md
-          
-          fail_build=false
-          
-          while IFS= read -r file; do
-            if [ -f "$file" ]; then
-              ext="${file##*.}"
-              lang="python"
-              case "$ext" in
-                js) lang="javascript" ;;
-                ts) lang="typescript" ;;
-                jsx) lang="javascript" ;;
-                tsx) lang="typescript" ;;
-              esac
-              
-              code=$(cat "$file" | jq -Rs .)
-              response=$(curl -s -X POST http://localhost:8000/scan \
-                -H "Content-Type: application/json" \
-                -d "{\"code\": $code, \"language\": \"$lang\", \"filename\": \"$file\"}")
-              
-              trust_score=$(echo "$response" | jq -r '.trust_score')
-              risk_level=$(echo "$response" | jq -r '.risk_level')
-              summary=$(echo "$response" | jq -r '.summary')
-              
-              echo "## 📄 \`$file\`" >> scan_results.md
-              echo "**Trust Score:** $trust_score/100 | **Risk Level:** $risk_level" >> scan_results.md
-              echo "" >> scan_results.md
-              echo "$summary" >> scan_results.md
-              echo "" >> scan_results.md
-              
-              vuln_count=$(echo "$response" | jq '.vulnerabilities | length')
-              if [ "$vuln_count" -gt 0 ]; then
-                echo "### Vulnerabilities Found:" >> scan_results.md
-                echo "$response" | jq -r '.vulnerabilities[] | "- **[\(.severity)] \(.title)** (Line \(.line_number))\n  - \(.description)\n  - Fix: \(.fix)\n"' >> scan_results.md
-              fi
-              
-              echo "---" >> scan_results.md
-              echo "" >> scan_results.md
-              
-              if [ "$trust_score" -lt 50 ]; then
-                fail_build=true
-              fi
-            fi
-          done < changed_files.txt
-          
-          if [ "$fail_build" = true ]; then
-            echo "fail=true" >> $GITHUB_OUTPUT
-          else
-            echo "fail=false" >> $GITHUB_OUTPUT
+          set -euo pipefail
+
+          command -v jq >/dev/null 2>&1 || {
+            echo "jq is required on the GitHub runner for scan result processing." >&2
+            exit 1
+          }
+
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+          results_dir="$(mktemp -d)"
+          comment_file="$RUNNER_TEMP/vibeguard-comment.md"
+          vulnerabilities_file="$RUNNER_TEMP/vibeguard-vulnerabilities.md"
+          : > "$vulnerabilities_file"
+
+          detect_language() {
+            case "${1##*.}" in
+              py) echo "python" ;;
+              js|jsx) echo "javascript" ;;
+              ts|tsx) echo "typescript" ;;
+              *) echo "plaintext" ;;
+            esac
+          }
+
+          severity_badge() {
+            case "$1" in
+              CRITICAL) echo "![CRITICAL](https://img.shields.io/badge/CRITICAL-darkred?style=flat-square)" ;;
+              HIGH) echo "![HIGH](https://img.shields.io/badge/HIGH-red?style=flat-square)" ;;
+              MEDIUM) echo "![MEDIUM](https://img.shields.io/badge/MEDIUM-orange?style=flat-square)" ;;
+              LOW) echo "![LOW](https://img.shields.io/badge/LOW-yellow?style=flat-square)" ;;
+              SAFE) echo "![SAFE](https://img.shields.io/badge/SAFE-brightgreen?style=flat-square)" ;;
+              *) echo "![UNKNOWN](https://img.shields.io/badge/UNKNOWN-lightgrey?style=flat-square)" ;;
+            esac
+          }
+
+          write_scan_failure_response() {
+            local response_file="$1"
+            local file="$2"
+            local description="$3"
+            jq -n \
+              --arg filename "$file" \
+              --arg description "$description" \
+              '{
+                trust_score: 0,
+                risk_level: "CRITICAL",
+                vulnerabilities: [
+                  {
+                    line_number: 0,
+                    severity: "CRITICAL",
+                    title: "Scan Failed",
+                    description: $description,
+                    fix: "Inspect the workflow logs and restore backend scan availability."
+                  }
+                ],
+                summary: ("Security scan failed for " + $filename + ".")
+              }' > "$response_file"
+          }
+
+          mapfile -t changed_files < <(
+            git diff --name-only "$base_sha" "$head_sha" -- '*.py' '*.js' '*.ts' '*.jsx' '*.tsx'
+          )
+
+          {
+            printf '%s\n' "$COMMENT_MARKER"
+            printf '## 🛡️ VibeGuard Security Scan Results\n\n'
+            printf '| File | Trust Score | Risk Level |\n'
+            printf '|------|-------------|------------|\n'
+          } > "$comment_file"
+
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            printf '| No changed source files | N/A | SAFE |\n\n' >> "$comment_file"
+            printf '### Vulnerabilities Found\n\n' >> "$comment_file"
+            printf 'No vulnerabilities found because this PR does not modify supported source files.\n\n' >> "$comment_file"
+            printf -- '---\n*Powered by VibeGuard 🛡️*\n' >> "$comment_file"
+            echo "comment_file=$comment_file" >> "$GITHUB_OUTPUT"
+            echo "has_low_score=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-      
-      - name: Comment PR
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            const results = fs.readFileSync('scan_results.md', 'utf8');
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: results
-            });
-      
-      - name: Fail if critical issues found
-        if: steps.scan.outputs.fail == 'true'
+
+          has_low_score=false
+          any_vulnerabilities=false
+          scanned_file_count=0
+
+          for file in "${changed_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+
+            scanned_file_count=$((scanned_file_count + 1))
+            language="$(detect_language "$file")"
+            response_hash="$(printf '%s' "$file" | sha256sum | cut -c1-12)"
+            response_file="$results_dir/$(basename "$file").$response_hash.json"
+            curl_error_file="$results_dir/$(basename "$file").$response_hash.curl.err"
+            payload="$(jq -n \
+              --rawfile code "$file" \
+              --arg language "$language" \
+              --arg filename "$file" \
+              '{code: $code, language: $language, filename: $filename}')"
+
+            set +e
+            http_code="$(curl \
+              --silent \
+              --show-error \
+              --output "$response_file" \
+              --write-out '%{http_code}' \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --data "$payload" \
+              http://localhost:8000/scan 2>"$curl_error_file")"
+            curl_status=$?
+            set -e
+
+            if [ "$curl_status" -ne 0 ]; then
+              error_message="$(tr '\n' ' ' < "$curl_error_file" | sed 's/[[:space:]]\+/ /g')"
+              write_scan_failure_response "$response_file" "$file" "The scan API request did not complete successfully. ${error_message:-No error details available.}"
+            elif [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+              write_scan_failure_response "$response_file" "$file" "The scan API returned HTTP status ${http_code}."
+            elif ! jq empty "$response_file" >/dev/null 2>&1; then
+              write_scan_failure_response "$response_file" "$file" "The scan API returned invalid JSON."
+            fi
+
+            trust_score="$(jq -r '.trust_score // 0' "$response_file")"
+            risk_level="$(jq -r '.risk_level // "UNKNOWN"' "$response_file")"
+
+            printf '| `%s` | %s/100 | %s |\n' "$file" "$trust_score" "$risk_level" >> "$comment_file"
+
+            if [ "$trust_score" -lt 50 ]; then
+              has_low_score=true
+            fi
+
+            vulnerability_count="$(jq '(.vulnerabilities // []) | length' "$response_file")"
+            if [ "$vulnerability_count" -gt 0 ]; then
+              any_vulnerabilities=true
+              printf '#### `%s`\n\n' "$file" >> "$vulnerabilities_file"
+              while IFS=$'\t' read -r severity title line_number description fix; do
+                badge="$(severity_badge "$severity")"
+                printf -- '- %s **%s** (Line %s)\n' "$badge" "$title" "$line_number" >> "$vulnerabilities_file"
+                printf '  Description: %s\n' "$description" >> "$vulnerabilities_file"
+                printf '  Fix suggestion: %s\n' "$fix" >> "$vulnerabilities_file"
+              done < <(
+                jq -r '
+                  (.vulnerabilities // [])[] |
+                  [
+                    (.severity // "LOW"),
+                    (.title // "Untitled vulnerability"),
+                    ((.line_number // 0) | tostring),
+                    (.description // "No description provided."),
+                    (.fix // "No fix suggestion provided.")
+                  ] | @tsv
+                ' "$response_file"
+              )
+              printf '\n' >> "$vulnerabilities_file"
+            fi
+          done
+
+          if [ "$scanned_file_count" -eq 0 ]; then
+            printf '| No existing source files to scan | N/A | SAFE |\n' >> "$comment_file"
+          fi
+
+          printf '\n### Vulnerabilities Found\n\n' >> "$comment_file"
+          if [ "$any_vulnerabilities" = true ]; then
+            cat "$vulnerabilities_file" >> "$comment_file"
+          else
+            printf 'No vulnerabilities detected in the changed files.\n\n' >> "$comment_file"
+          fi
+
+          printf -- '---\n*Powered by VibeGuard 🛡️*\n' >> "$comment_file"
+
+          echo "comment_file=$comment_file" >> "$GITHUB_OUTPUT"
+          echo "has_low_score=$has_low_score" >> "$GITHUB_OUTPUT"
+
+      - name: Post comment to PR
+        if: always() && steps.scan.outputs.comment_file != ''
+        env:
+          COMMENT_FILE: ${{ steps.scan.outputs.comment_file }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          echo "❌ Security scan failed: One or more files scored below 50"
-          exit 1
+          set -euo pipefail
+
+          comments_api="${{ github.api_url }}/repos/${REPOSITORY}/issues/${PR_NUMBER}/comments"
+          payload="$(jq -n --rawfile body "$COMMENT_FILE" '{body: $body}')"
+
+          existing_comment_id="$(
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --header "Authorization: Bearer $GITHUB_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              "$comments_api?per_page=100" |
+            jq -r '.[] | select((.body // "") | contains("<!-- vibeguard-security-scan -->")) | .id' |
+            tail -n 1
+          )"
+
+          if [ -n "$existing_comment_id" ]; then
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --request PATCH \
+              --header "Authorization: Bearer $GITHUB_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'Content-Type: application/json' \
+              --data "$payload" \
+              "${{ github.api_url }}/repos/${REPOSITORY}/issues/comments/${existing_comment_id}" >/dev/null
+          else
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --request POST \
+              --header "Authorization: Bearer $GITHUB_TOKEN" \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'Content-Type: application/json' \
+              --data "$payload" \
+              "$comments_api" >/dev/null
+          fi
+
+      - name: Check scores
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.scan.outputs.has_low_score }}" = "true" ]; then
+            echo "One or more scanned files scored below 50." >&2
+            exit 1
+          fi
+
+      - name: Stop backend
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f backend.pid ]; then
+            kill "$(cat backend.pid)" || true
+          fi
