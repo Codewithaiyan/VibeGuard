@@ -76,36 +76,36 @@ jobs:
             local response_file="$1"
             local file="$2"
             local description="$3"
-            jq -n               --arg filename "$file"               --arg description "$description"               '{
-                trust_score: 0,
-                risk_level: "CRITICAL",
-                vulnerabilities: [
-                  {
-                    line_number: 0,
-                    severity: "CRITICAL",
-                    title: "Scan Failed",
-                    description: $description,
-                    fix: "Inspect the workflow logs and restore backend scan availability."
-                  }
-                ],
-                summary: ("Security scan failed for " + $filename + ".")
-              }' > "$response_file"
+            jq -n --arg filename "$file" --arg description "$description" '{
+              trust_score: 0,
+              risk_level: "CRITICAL",
+              vulnerabilities: [
+                {
+                  line_number: 0,
+                  severity: "CRITICAL",
+                  title: "Scan Failed",
+                  description: $description,
+                  fix: "Inspect the workflow logs and restore backend scan availability."
+                }
+              ],
+              summary: ("Security scan failed for " + $filename + ".")
+            }' > "$response_file"
           }
 
           write_dependency_failure_response() {
             local response_file="$1"
             local description="$2"
             local status="${3:-skipped}"
-            jq -n               --arg description "$description"               --arg status "$status"               '{
-                total_packages: 0,
-                scanned_packages: 0,
-                vulnerable_packages: 0,
-                vulnerabilities: [],
-                dependency_score: 100,
-                risk_level: "UNKNOWN",
-                scan_status: $status,
-                warnings: [$description]
-              }' > "$response_file"
+            jq -n --arg description "$description" --arg status "$status" '{
+              total_packages: 0,
+              scanned_packages: 0,
+              vulnerable_packages: 0,
+              vulnerabilities: [],
+              dependency_score: 100,
+              risk_level: "UNKNOWN",
+              scan_status: $status,
+              warnings: [$description]
+            }' > "$response_file"
           }
 
           mapfile -t changed_files < <(git diff --name-only "$base_sha" "$head_sha")
@@ -127,34 +127,17 @@ jobs:
           done
 
           {
-            printf '%s
-' "$COMMENT_MARKER"
-            printf '## 🛡️ VibeGuard Security Scan Results
-
-'
-            printf '| Scan Type | File | Score | Risk Level |
-'
-            printf '|-----------|------|-------|------------|
-'
+            printf '%s\n' "$COMMENT_MARKER"
+            printf '## VibeGuard Security Scan Results\n\n'
+            printf '| Scan Type | File | Score | Risk Level |\n'
+            printf '|-----------|------|-------|------------|\n'
           } > "$comment_file"
 
           if [ "${#changed_code_files[@]}" -eq 0 ] && [ "${#changed_dependency_files[@]}" -eq 0 ]; then
-            printf '| No supported changed files | N/A | N/A | SAFE |
-
-' >> "$comment_file"
-            printf '### Code Vulnerabilities
-
-No supported source files changed in this PR.
-
-' >> "$comment_file"
-            printf '### Dependency Vulnerabilities
-
-No supported dependency files changed in this PR.
-
-' >> "$comment_file"
-            printf -- '---
-*Powered by VibeGuard 🛡️*
-' >> "$comment_file"
+            printf '| No supported changed files | N/A | N/A | SAFE |\n\n' >> "$comment_file"
+            printf '### Code Vulnerabilities\n\nNo supported source files changed in this PR.\n\n' >> "$comment_file"
+            printf '### Dependency Vulnerabilities\n\nNo supported dependency files changed in this PR.\n\n' >> "$comment_file"
+            printf -- '---\n*Powered by VibeGuard*\n' >> "$comment_file"
             echo "comment_file=$comment_file" >> "$GITHUB_OUTPUT"
             echo "has_low_score=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -176,16 +159,15 @@ No supported dependency files changed in this PR.
             response_hash="$(printf '%s' "$file" | sha256sum | cut -c1-12)"
             response_file="$results_dir/$(basename "$file").$response_hash.code.json"
             curl_error_file="$results_dir/$(basename "$file").$response_hash.code.curl.err"
-            payload="$(jq -n               --rawfile code "$file"               --arg language "$language"               --arg filename "$file"               '{code: $code, language: $language, filename: $filename}')"
+            payload="$(jq -n --rawfile code "$file" --arg language "$language" --arg filename "$file" '{code: $code, language: $language, filename: $filename}')"
 
             set +e
-            http_code="$(curl               --silent               --show-error               --output "$response_file"               --write-out '%{http_code}'               --request POST               --header 'Content-Type: application/json'               --data "$payload"               "$BACKEND_URL/scan" 2>"$curl_error_file")"
+            http_code="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data "$payload" "$BACKEND_URL/scan" 2>"$curl_error_file")"
             curl_status=$?
             set -e
 
             if [ "$curl_status" -ne 0 ]; then
-              error_message="$(tr '
-' ' ' < "$curl_error_file" | sed 's/[[:space:]]\+/ /g')"
+              error_message="$(tr '\n' ' ' < "$curl_error_file" | sed 's/[[:space:]]\+/ /g')"
               write_scan_failure_response "$response_file" "$file" "The scan API request did not complete successfully. ${error_message:-No error details available.}"
             elif [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
               write_scan_failure_response "$response_file" "$file" "The scan API returned HTTP status ${http_code}."
@@ -195,8 +177,7 @@ No supported dependency files changed in this PR.
 
             trust_score="$(jq -r '.trust_score // 0' "$response_file")"
             risk_level="$(jq -r '.risk_level // "UNKNOWN"' "$response_file")"
-            printf '| Code | `%s` | %s/100 | %s |
-' "$file" "$trust_score" "$risk_level" >> "$comment_file"
+            printf '| Code | `%s` | %s/100 | %s |\n' "$file" "$trust_score" "$risk_level" >> "$comment_file"
 
             if [ "$trust_score" -lt 50 ]; then
               has_low_score=true
@@ -205,17 +186,12 @@ No supported dependency files changed in this PR.
             vulnerability_count="$(jq '(.vulnerabilities // []) | length' "$response_file")"
             if [ "$vulnerability_count" -gt 0 ]; then
               any_code_vulnerabilities=true
-              printf '#### `%s`
-
-' "$file" >> "$code_vulnerabilities_file"
-              while IFS=$'	' read -r severity title line_number description fix; do
+              printf '#### `%s`\n\n' "$file" >> "$code_vulnerabilities_file"
+              while IFS=$'\t' read -r severity title line_number description fix; do
                 badge="$(severity_badge "$severity")"
-                printf -- '- %s **%s** (Line %s)
-' "$badge" "$title" "$line_number" >> "$code_vulnerabilities_file"
-                printf '  Description: %s
-' "$description" >> "$code_vulnerabilities_file"
-                printf '  Fix suggestion: %s
-' "$fix" >> "$code_vulnerabilities_file"
+                printf -- '- %s **%s** (Line %s)\n' "$badge" "$title" "$line_number" >> "$code_vulnerabilities_file"
+                printf '  Description: %s\n' "$description" >> "$code_vulnerabilities_file"
+                printf '  Fix suggestion: %s\n' "$fix" >> "$code_vulnerabilities_file"
               done < <(
                 jq -r '
                   (.vulnerabilities // [])[] |
@@ -228,8 +204,7 @@ No supported dependency files changed in this PR.
                   ] | @tsv
                 ' "$response_file"
               )
-              printf '
-' >> "$code_vulnerabilities_file"
+              printf '\n' >> "$code_vulnerabilities_file"
             fi
           done
 
@@ -242,16 +217,15 @@ No supported dependency files changed in this PR.
             response_hash="$(printf '%s' "$file" | sha256sum | cut -c1-12)"
             response_file="$results_dir/$(basename "$file").$response_hash.dependencies.json"
             curl_error_file="$results_dir/$(basename "$file").$response_hash.dependencies.curl.err"
-            payload="$(jq -n               --rawfile file_content "$file"               --arg filename "$file"               '{file_content: $file_content, filename: $filename}')"
+            payload="$(jq -n --rawfile file_content "$file" --arg filename "$file" '{file_content: $file_content, filename: $filename}')"
 
             set +e
-            http_code="$(curl               --silent               --show-error               --output "$response_file"               --write-out '%{http_code}'               --request POST               --header 'Content-Type: application/json'               --data "$payload"               "$BACKEND_URL/scan-dependencies" 2>"$curl_error_file")"
+            http_code="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' --request POST --header 'Content-Type: application/json' --data "$payload" "$BACKEND_URL/scan-dependencies" 2>"$curl_error_file")"
             curl_status=$?
             set -e
 
             if [ "$curl_status" -ne 0 ]; then
-              error_message="$(tr '
-' ' ' < "$curl_error_file" | sed 's/[[:space:]]\+/ /g')"
+              error_message="$(tr '\n' ' ' < "$curl_error_file" | sed 's/[[:space:]]\+/ /g')"
               write_dependency_failure_response "$response_file" "The dependency scan API request did not complete successfully. ${error_message:-No error details available.}" "skipped"
             elif [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
               api_error="$(jq -r '.detail // empty' "$response_file" 2>/dev/null || true)"
@@ -267,8 +241,7 @@ No supported dependency files changed in this PR.
             dependency_score="$(jq -r '.dependency_score // 100' "$response_file")"
             risk_level="$(jq -r '.risk_level // "UNKNOWN"' "$response_file")"
             scan_status="$(jq -r '.scan_status // "unknown"' "$response_file")"
-            printf '| Dependencies | `%s` | %s/100 | %s |
-' "$file" "$dependency_score" "$risk_level" >> "$comment_file"
+            printf '| Dependencies | `%s` | %s/100 | %s |\n' "$file" "$dependency_score" "$risk_level" >> "$comment_file"
 
             if [ "$scan_status" != "skipped" ] && [ "$dependency_score" -lt 50 ]; then
               has_low_score=true
@@ -277,23 +250,16 @@ No supported dependency files changed in this PR.
             vulnerability_count="$(jq '(.vulnerabilities // []) | length' "$response_file")"
             if [ "$vulnerability_count" -gt 0 ]; then
               any_dependency_vulnerabilities=true
-              printf '#### `%s`
-
-' "$file" >> "$dependency_vulnerabilities_file"
-              while IFS=$'	' read -r package_name current_version vulnerability_id severity title description fixed_version; do
+              printf '#### `%s`\n\n' "$file" >> "$dependency_vulnerabilities_file"
+              while IFS=$'\t' read -r package_name current_version vulnerability_id severity title description fixed_version; do
                 badge="$(severity_badge "$severity")"
-                printf -- '- %s **%s** `%s@%s`
-' "$badge" "$vulnerability_id" "$package_name" "$current_version" >> "$dependency_vulnerabilities_file"
-                printf '  Title: %s
-' "$title" >> "$dependency_vulnerabilities_file"
-                printf '  Description: %s
-' "$description" >> "$dependency_vulnerabilities_file"
+                printf -- '- %s **%s** `%s@%s`\n' "$badge" "$vulnerability_id" "$package_name" "$current_version" >> "$dependency_vulnerabilities_file"
+                printf '  Title: %s\n' "$title" >> "$dependency_vulnerabilities_file"
+                printf '  Description: %s\n' "$description" >> "$dependency_vulnerabilities_file"
                 if [ -n "$fixed_version" ]; then
-                  printf '  Fix suggestion: Upgrade to %s
-' "$fixed_version" >> "$dependency_vulnerabilities_file"
+                  printf '  Fix suggestion: Upgrade to %s\n' "$fixed_version" >> "$dependency_vulnerabilities_file"
                 else
-                  printf '  Fix suggestion: No fixed version has been published yet.
-' >> "$dependency_vulnerabilities_file"
+                  printf '  Fix suggestion: No fixed version has been published yet.\n' >> "$dependency_vulnerabilities_file"
                 fi
               done < <(
                 jq -r '
@@ -309,83 +275,55 @@ No supported dependency files changed in this PR.
                   ] | @tsv
                 ' "$response_file"
               )
-              printf '
-' >> "$dependency_vulnerabilities_file"
+              printf '\n' >> "$dependency_vulnerabilities_file"
             fi
 
             warning_count="$(jq '(.warnings // []) | length' "$response_file")"
             if [ "$warning_count" -gt 0 ]; then
-              printf '#### `%s`
-
-' "$file" >> "$dependency_notes_file"
+              printf '#### `%s`\n\n' "$file" >> "$dependency_notes_file"
               while IFS= read -r note; do
-                printf -- '- %s
-' "$note" >> "$dependency_notes_file"
+                printf -- '- %s\n' "$note" >> "$dependency_notes_file"
               done < <(jq -r '(.warnings // [])[] | gsub("[\r\n\t]+"; " ")' "$response_file")
-              printf '
-' >> "$dependency_notes_file"
+              printf '\n' >> "$dependency_notes_file"
             fi
           done
 
           if [ "$scanned_code_file_count" -eq 0 ] && [ "${#changed_code_files[@]}" -gt 0 ]; then
-            printf '| Code | No existing source files to scan | N/A | SAFE |
-' >> "$comment_file"
+            printf '| Code | No existing source files to scan | N/A | SAFE |\n' >> "$comment_file"
           fi
 
           if [ "$scanned_dependency_file_count" -eq 0 ] && [ "${#changed_dependency_files[@]}" -gt 0 ]; then
-            printf '| Dependencies | No existing dependency files to scan | N/A | SAFE |
-' >> "$comment_file"
+            printf '| Dependencies | No existing dependency files to scan | N/A | SAFE |\n' >> "$comment_file"
           fi
 
-          printf '
-### Code Vulnerabilities
-
-' >> "$comment_file"
+          printf '\n### Code Vulnerabilities\n\n' >> "$comment_file"
           if [ "$any_code_vulnerabilities" = true ]; then
             cat "$code_vulnerabilities_file" >> "$comment_file"
           elif [ "${#changed_code_files[@]}" -eq 0 ]; then
-            printf 'No supported source files changed in this PR.
-
-' >> "$comment_file"
+            printf 'No supported source files changed in this PR.\n\n' >> "$comment_file"
           else
-            printf 'No vulnerabilities detected in the changed source files.
-
-' >> "$comment_file"
+            printf 'No vulnerabilities detected in the changed source files.\n\n' >> "$comment_file"
           fi
 
-          printf '### Dependency Vulnerabilities
-
-' >> "$comment_file"
+          printf '### Dependency Vulnerabilities\n\n' >> "$comment_file"
           if [ "$any_dependency_vulnerabilities" = true ]; then
             cat "$dependency_vulnerabilities_file" >> "$comment_file"
           elif [ "${#changed_dependency_files[@]}" -eq 0 ]; then
-            printf 'No supported dependency files changed in this PR.
-
-' >> "$comment_file"
+            printf 'No supported dependency files changed in this PR.\n\n' >> "$comment_file"
           else
-            printf 'No known dependency vulnerabilities detected in the changed dependency files.
-
-' >> "$comment_file"
+            printf 'No known dependency vulnerabilities detected in the changed dependency files.\n\n' >> "$comment_file"
           fi
 
-          printf '### Dependency Scan Notes
-
-' >> "$comment_file"
+          printf '### Dependency Scan Notes\n\n' >> "$comment_file"
           if [ -s "$dependency_notes_file" ]; then
             cat "$dependency_notes_file" >> "$comment_file"
           elif [ "${#changed_dependency_files[@]}" -eq 0 ]; then
-            printf 'No dependency scan notes because no supported dependency files changed.
-
-' >> "$comment_file"
+            printf 'No dependency scan notes because no supported dependency files changed.\n\n' >> "$comment_file"
           else
-            printf 'No dependency scan notes.
-
-' >> "$comment_file"
+            printf 'No dependency scan notes.\n\n' >> "$comment_file"
           fi
 
-          printf -- '---
-*Powered by VibeGuard 🛡️*
-' >> "$comment_file"
+          printf -- '---\n*Powered by VibeGuard*\n' >> "$comment_file"
 
           echo "comment_file=$comment_file" >> "$GITHUB_OUTPUT"
           echo "has_low_score=$has_low_score" >> "$GITHUB_OUTPUT"
@@ -404,15 +342,15 @@ No supported dependency files changed in this PR.
           payload="$(jq -n --rawfile body "$COMMENT_FILE" '{body: $body}')"
 
           existing_comment_id="$(
-            curl               --fail               --silent               --show-error               --header "Authorization: Bearer $GITHUB_TOKEN"               --header 'Accept: application/vnd.github+json'               "$comments_api?per_page=100" |
+            curl --fail --silent --show-error --header "Authorization: Bearer $GITHUB_TOKEN" --header 'Accept: application/vnd.github+json' "$comments_api?per_page=100" |
             jq -r '.[] | select((.body // "") | contains("<!-- vibeguard-security-scan -->")) | .id' |
             tail -n 1
           )"
 
           if [ -n "$existing_comment_id" ]; then
-            curl               --fail               --silent               --show-error               --request PATCH               --header "Authorization: Bearer $GITHUB_TOKEN"               --header 'Accept: application/vnd.github+json'               --header 'Content-Type: application/json'               --data "$payload"               "${{ github.api_url }}/repos/${REPOSITORY}/issues/comments/${existing_comment_id}" >/dev/null
+            curl --fail --silent --show-error --request PATCH --header "Authorization: Bearer $GITHUB_TOKEN" --header 'Accept: application/vnd.github+json' --header 'Content-Type: application/json' --data "$payload" "${{ github.api_url }}/repos/${REPOSITORY}/issues/comments/${existing_comment_id}" >/dev/null
           else
-            curl               --fail               --silent               --show-error               --request POST               --header "Authorization: Bearer $GITHUB_TOKEN"               --header 'Accept: application/vnd.github+json'               --header 'Content-Type: application/json'               --data "$payload"               "$comments_api" >/dev/null
+            curl --fail --silent --show-error --request POST --header "Authorization: Bearer $GITHUB_TOKEN" --header 'Accept: application/vnd.github+json' --header 'Content-Type: application/json' --data "$payload" "$comments_api" >/dev/null
           fi
 
       - name: Check scores
