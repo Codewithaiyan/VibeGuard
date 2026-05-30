@@ -6,13 +6,15 @@
 .app {
   min-height: 100svh;
   padding: 2rem;
-  background: #0a0a0a;
+  background:
+    radial-gradient(circle at top, rgba(0, 255, 136, 0.12), transparent 30%),
+    linear-gradient(180deg, #0b0f14 0%, #090b0f 100%);
   color: #fff;
 }
 
 .app-header {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
 }
 
 .app-header h1 {
@@ -23,7 +25,39 @@
 
 .app-header p {
   font-size: 1.2rem;
-  color: #888;
+  color: #96a1b5;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.75rem;
+  max-width: 1400px;
+  margin: 0 auto 1.5rem;
+}
+
+.tab {
+  flex: 1;
+  padding: 1rem 1.25rem;
+  border: 1px solid #23303f;
+  border-radius: 999px;
+  background: rgba(15, 20, 29, 0.9);
+  color: #96a1b5;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.tab:hover {
+  transform: translateY(-1px);
+  border-color: #2d455b;
+  color: #d8e2f0;
+}
+
+.tab.active {
+  border-color: #00ff88;
+  background: rgba(0, 255, 136, 0.14);
+  color: #00ff88;
 }
 
 .container {
@@ -36,10 +70,11 @@
 
 .left-panel,
 .right-panel {
-  background: #1a1a1a;
-  border-radius: 12px;
+  background: rgba(15, 20, 29, 0.9);
+  border-radius: 18px;
   padding: 2rem;
-  border: 1px solid #333;
+  border: 1px solid #1f2a38;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
 }
 
 .controls {
@@ -48,68 +83,85 @@
   margin-bottom: 1rem;
 }
 
+.controls-stack {
+  display: block;
+}
+
 .filename-input,
 .app select {
-  background: #0a0a0a;
-  border: 1px solid #333;
-  border-radius: 6px;
+  background: #090d13;
+  border: 1px solid #23303f;
+  border-radius: 10px;
   color: #fff;
   font-size: 1rem;
 }
 
 .filename-input {
   flex: 1;
-  padding: 0.75rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
 }
 
 .app select {
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
   cursor: pointer;
+}
+
+.form-hint {
+  margin: 0.75rem 0 0;
+  color: #96a1b5;
+  line-height: 1.5;
+}
+
+.form-hint code {
+  color: #d8e2f0;
 }
 
 .code-editor {
   width: 100%;
-  height: 400px;
+  min-height: 420px;
   padding: 1rem;
   margin-bottom: 1rem;
   resize: vertical;
-  background: #0a0a0a;
-  border: 1px solid #333;
-  border-radius: 6px;
+  background: #090d13;
+  border: 1px solid #23303f;
+  border-radius: 10px;
   color: #fff;
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   font-size: 0.95rem;
+  line-height: 1.6;
 }
 
 .scan-button {
   width: 100%;
   padding: 1rem;
   border: none;
-  border-radius: 6px;
-  background: #00ff88;
-  color: #0a0a0a;
-  font-size: 1.1rem;
-  font-weight: 700;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #00ff88 0%, #00c27a 100%);
+  color: #07110b;
+  font-size: 1.05rem;
+  font-weight: 800;
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
+  transition: transform 0.2s ease, filter 0.2s ease;
 }
 
 .scan-button:hover:not(:disabled) {
-  background: #00dd77;
+  filter: brightness(1.05);
   transform: translateY(-2px);
 }
 
 .scan-button:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
 .error {
   margin-top: 1rem;
   padding: 1rem;
-  background: #ff4444;
-  border-radius: 6px;
-  color: #fff;
+  background: rgba(255, 68, 68, 0.18);
+  border: 1px solid rgba(255, 68, 68, 0.35);
+  border-radius: 10px;
+  color: #ffd9d9;
 }
 
 .loading {
@@ -121,7 +173,7 @@
   width: 50px;
   height: 50px;
   margin: 0 auto 1rem;
-  border: 4px solid #333;
+  border: 4px solid #23303f;
   border-top-color: #00ff88;
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -137,43 +189,84 @@
   margin-bottom: 1.5rem;
   padding: 2rem;
   border: 4px solid;
-  border-radius: 12px;
+  border-radius: 16px;
   text-align: center;
 }
 
 .score-circle {
   margin-bottom: 0.5rem;
   font-size: 4rem;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .score-label {
-  font-size: 1.2rem;
-  color: #888;
+  font-size: 1.1rem;
+  color: #96a1b5;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  padding: 1.25rem;
+  background: #090d13;
+  border: 1px solid #23303f;
+  border-radius: 14px;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #f6fbff;
+}
+
+.stat-label {
+  margin-top: 0.35rem;
+  color: #96a1b5;
 }
 
 .risk-badge {
   display: inline-block;
   margin-bottom: 1.5rem;
   padding: 0.5rem 1.5rem;
-  border-radius: 20px;
-  font-weight: 700;
+  border-radius: 999px;
+  color: #08130d;
+  font-weight: 800;
 }
 
-.summary {
+.summary,
+.notes-panel {
   margin-bottom: 2rem;
 }
 
 .summary h3,
-.vulnerabilities h3 {
+.vulnerabilities h3,
+.notes-panel h3 {
   margin-bottom: 0.75rem;
   color: #00ff88;
 }
 
 .summary p,
-.vuln-description {
-  color: #ccc;
+.vuln-description,
+.notes-list {
+  color: #cbd5e1;
   line-height: 1.6;
+}
+
+.notes-panel {
+  padding: 1rem 1.25rem;
+  background: #090d13;
+  border: 1px solid #23303f;
+  border-radius: 14px;
+}
+
+.notes-list {
+  margin: 0;
+  padding-left: 1.25rem;
 }
 
 .vulnerabilities h3 {
@@ -183,64 +276,87 @@
 .vulnerability {
   margin-bottom: 1rem;
   padding: 1rem;
-  background: #0a0a0a;
-  border: 1px solid #333;
-  border-radius: 8px;
+  background: #090d13;
+  border: 1px solid #23303f;
+  border-radius: 12px;
 }
 
 .vuln-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
 
 .severity-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  color: #08130d;
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .vuln-title {
   flex: 1;
-  font-weight: 700;
+  font-weight: 800;
 }
 
-.line-number {
-  color: #888;
+.line-number,
+.package-version {
+  color: #96a1b5;
   font-size: 0.9rem;
+}
+
+.vuln-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.meta-pill {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(0, 255, 136, 0.08);
+  color: #b4f7d3;
+  font-size: 0.82rem;
+}
+
+.meta-pill-fix {
+  background: rgba(255, 215, 0, 0.14);
+  color: #ffe584;
 }
 
 .vuln-description {
   margin-bottom: 0.75rem;
-  line-height: 1.5;
 }
 
 .vuln-fix {
-  padding: 0.75rem;
-  background: #1a1a1a;
+  padding: 0.8rem 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
   border-left: 3px solid #00ff88;
-  border-radius: 4px;
-  font-size: 0.9rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
 }
 
 .vuln-fix strong {
   color: #00ff88;
 }
 
-.no-vulnerabilities {
-  padding: 2rem;
+.no-vulnerabilities,
+.placeholder {
+  padding: 3rem 1rem;
   text-align: center;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
+}
+
+.no-vulnerabilities {
   color: #00ff88;
 }
 
 .placeholder {
-  padding: 3rem;
-  text-align: center;
-  color: #888;
-  font-size: 1.1rem;
+  color: #96a1b5;
 }
 
 @media (max-width: 1024px) {
@@ -248,7 +364,30 @@
     padding: 1rem;
   }
 
+  .tabs {
+    flex-direction: column;
+  }
+
   .container {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .controls {
+    flex-direction: column;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-header h1 {
+    font-size: 2.4rem;
+  }
+
+  .left-panel,
+  .right-panel {
+    padding: 1.25rem;
   }
 }
